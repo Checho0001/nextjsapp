@@ -6,6 +6,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
 
 jobs:
   build-and-push:
@@ -27,19 +28,14 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Convert repo name to lowercase
-        id: repo
-        run: |
-          echo "REPO_LC=${GITHUB_REPOSITORY,,}" >> $GITHUB_ENV
-
       - name: Build and Push Docker image
         uses: docker/build-push-action@v6
         with:
           context: .
           push: true
           tags: |
-            ${{ env.REGISTRY }}/${{ env.REPO_LC }}:latest
-            ${{ env.REGISTRY }}/${{ env.REPO_LC }}:${{ github.sha }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
 
   deploy:
     needs: build-and-push
@@ -59,10 +55,10 @@ jobs:
             fi
 
             # Login to GHCR
-            docker login ghcr.io -u ${{ secrets.GHCR_USERNAME }} -p ${{ secrets.GHCR_TOKEN }}
+            echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ secrets.GHCR_USERNAME }} --password-stdin
 
             # Pull and restart container
             docker pull ghcr.io/${{ github.repository }}:latest
             docker stop nextjs-app || true
             docker rm nextjs-app || true
-            docker run -d --name nextjs-app -p 80:3000 ghcr.io/${{ github.repository,, }}:latest
+            docker run -d --name nextjs-app -p 80:3000 ghcr.io/${{ github.repository }}:latest
