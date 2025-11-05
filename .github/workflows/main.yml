@@ -52,14 +52,17 @@ jobs:
             # Install docker if missing
             if ! command -v docker &> /dev/null; then
               sudo apt update -y
-              sudo apt install -y docker.io
+              sudo DEBIAN_FRONTEND=noninteractive apt install -y docker.io
             fi
 
             # Login to GHCR
-            echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ secrets.GHCR_USERNAME }} --password-stdin
+            echo "${{ secrets.GHCR_TOKEN }}" | sudo docker login ghcr.io -u ${{ secrets.GHCR_USERNAME }} --password-stdin
 
-            # Pull and restart container
-            docker pull ghcr.io/${{ github.repository }}:latest
-            docker stop nextjs-app || true
-            docker rm nextjs-app || true
-            docker run -d --name nextjs-app -p 80:3000 ghcr.io/${{ github.repository }}:latest
+            # Set image variable (lowercase)
+            IMAGE="ghcr.io/${{ github.repository_owner }}/nextjsapp:latest"
+
+            # Pull, stop, remove, and run container
+            sudo docker pull $IMAGE
+            sudo docker stop nextjs-app || true
+            sudo docker rm nextjs-app || true
+            sudo docker run -d --name nextjs-app -p 80:3000 $IMAGE
