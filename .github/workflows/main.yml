@@ -70,7 +70,7 @@ jobs:
 
             # Optional: cleanup dangling images
             sudo docker image prune -f
-    notify:
+  notify:
       needs: deploy
       runs-on: ubuntu-latest
       steps:
