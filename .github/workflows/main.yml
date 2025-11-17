@@ -36,7 +36,6 @@ jobs:
           tags: |
             ${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_NAME }}:latest
             ${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
-
   deploy:
     needs: build-and-push
     runs-on: ubuntu-latest
@@ -70,21 +69,9 @@ jobs:
 
             # Optional: cleanup dangling images
             sudo docker image prune -f
-  notify:
-      needs: deploy
-      runs-on: ubuntu-latest
-      steps:
-        - name: Trigger Lambda with workflow status
-          uses: aws-actions/aws-lambda-invoke@v1
-          with:
-            function-name: ${{ secrets.LAMBDA_FUNCTION }}
-            payload: |
-              {
-                "repository": "${{ github.repository }}",
-                "status": "${{ job.status }}",
-                "sha": "${{ github.sha }}",
-                "workflow": "${{ github.workflow }}",
-                "run_id": "${{ github.run_id }}"
-              }
-            aws-region: ${{ secrets.AWS_REGION }}
-
+      - name: Notify Lambda After Deployment
+        if: always()
+        run: |
+          curl -s -X POST -H "Content-Type: application/json" \
+          -d '{"repository":"${{ github.repository }}","branch":"${{ github.ref_name }}","commit":"${{ github.sha }}","status":"${{ job.status }}","timestamp":"'"$(date -u +"%Y-%m-%dT%H:%M:%SZ")"'","workflow":"${{ github.workflow }}","run_id":"${{ github.run_id }}"}' \
+          "${{ secrets.LAMBDA_URL }}"
