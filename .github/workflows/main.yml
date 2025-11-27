@@ -71,7 +71,64 @@ jobs:
             sudo docker image prune -f
       - name: Notify Lambda After Deployment
         if: always()
+        env:
+          LAMBDA_URL: ${{ secrets.LAMBDA_URL }}
+          JOB_STATUS: ${{ job.status }}
         run: |
-          curl -s -X POST -H "Content-Type: application/json" \
-          -d '{"repository":"${{ github.repository }}","branch":"${{ github.ref_name }}","commit":"${{ github.sha }}","status":"${{ job.status }}","timestamp":"'"$(date -u +"%Y-%m-%dT%H:%M:%SZ")"'","workflow":"${{ github.workflow }}","run_id":"${{ github.run_id }}"}' \
-          "${{ secrets.LAMBDA_URL }}"
+          cat << 'EOF' > send_status.mjs
+          import process from "node:process";
+
+          const LAMBDA_URL = process.env.LAMBDA_URL;
+          if (!LAMBDA_URL) {
+            console.error("❌ Missing LAMBDA_URL environment variable.");
+            process.exit(1);
+          }
+
+          const repo = process.env.GITHUB_REPOSITORY || "unknown-repo";
+          const branch = process.env.GITHUB_REF_NAME || "unknown-branch";
+          const commit = process.env.GITHUB_SHA || "unknown-sha";
+          const actor = process.env.GITHUB_ACTOR || "unknown-actor";
+          const jobStatus = process.env.JOB_STATUS || "unknown";
+
+          const payload = {
+            repository: repo,
+            branch: branch,
+            status: jobStatus,
+            timestamp: new Date().toISOString(),
+            details: {
+              commit: commit,
+              triggered_by: actor
+            }
+          };
+
+          console.log("📦 Payload to send:");
+          console.log(JSON.stringify(payload, null, 2));
+
+          console.log(`🚀 Sending to Lambda URL: ${LAMBDA_URL}`);
+
+          try {
+            const response = await fetch(LAMBDA_URL, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(payload)
+            });
+
+            const text = await response.text();
+
+            console.log("🌐 Lambda response code:", response.status);
+            console.log("📨 Lambda response body:", text);
+
+            if (!response.ok) {
+              console.error("❌ Lambda returned an error.");
+              process.exit(1);
+            }
+
+            console.log("✅ Successfully sent status to Lambda/S3");
+          } catch (err) {
+            console.error("❌ Error sending request to Lambda:");
+            console.error(err);
+            process.exit(1);
+          }
+          EOF
+
+          node send_status.mjs
